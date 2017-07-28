@@ -2,86 +2,97 @@ import socket
 import threading
 import traceback
 
-CREDENTIALS = "NICK Bot\r\n" \
-              "USER blaBot * 8 :testBOT\r\n"
+CREDENTIALS = "NICK Monitoring_System\r\n" \
+              "USER moniBot * 8 :This is the monitoring message bot\r\n"
+CHANNELS = ["test"]
+
 
 class IRCBot:
-    serverAddress = None
-    clientSocket = None
-    fd = None
-    running = True
-    lock = None
+    _serverAddress = None
+    _clientSocket = None
+    _fd = None
+    _running = True
+    _lock = None
 
     def __init__(self, address):
-        self.serverAddress = address
-        self.clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.fd = self.clientSocket.makefile("r")
-        self.lock = threading.Lock()
-
+        self._serverAddress = address
+        self._clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._fd = self._clientSocket.makefile("r")
+        self._lock = threading.Lock()
 
     def quit(self):
-        self.sendMsg("QUIT")
+        self._sendMsg("QUIT")
+        self._running = False
+        # Damit die readline-Methode nicht mehr blockt und der _run-Thread terminieren kann
         try:
-            self.clientSocket.close()
-            self.fd.close()
+            self._clientSocket.shutdown(socket.SHUT_RDWR)
         except:
             pass
-
+        try:
+            self._clientSocket.close()
+        except:
+            pass
 
     def __del__(self):
         self.quit()
 
-
-    def sendMsg(self, msg):
-        with self.lock:
+    def _sendMsg(self, msg):
+        res = True
+        with self._lock:
             try:
-                self.clientSocket.send((msg + "\r\n").encode('UTF-8'))
-            except Exception:
-                traceback.print_exc()
+                self._clientSocket.send((msg + "\r\n").encode('UTF-8'))
+            except:
+                res = False
+        return res
 
-
-
-    def waitForEvent(self, action):
+    def _waitForEvent(self, action):
         result = False
-        while not result:
-            received = self.fd.readline()
-            # super fancy println debugging
-            print(received)
-            result = action(received)
-        return result
+        while not result and self._running:
+            try:
+                received = self._fd.readline()
+                # super fancy println debugging
+                print(received)
+                result = action(received)
+            except:
+                pass
 
-
-    def sendPong(self, received):
+    def _sendPong(self, received):
         res = False
         if received.startswith("PING"):
-            self.sendMsg("PONG" + received[4:])
+            self._sendMsg("PONG" + received[4:])
             res = True
         return res
 
-
-    def joinChannel(self, received):
+    def _joinChannels(self, received):
         res = False
-        tmp = received.split()[1]
-        if (tmp == "376" or tmp == "422"):
-            self.sendMsg("JOIN #test")
-            res = True
+        # falls die Verbindung geschlossen wird, bevor der Bot im
+        # Pong-Loop ist, würde das hier böse abrauchen, daher try-catch
+        try:
+            status = received.split()[1]
+            if status == "376" or status == "422":
+                for channel in CHANNELS:
+                    self._sendMsg("JOIN #" + channel)
+                res = True
+        except:
+            pass
         return res
 
+    def composeMsgToChannel(self, channel, msg):
+        self._sendMsg("PRIVMSG #" + channel + " :" + msg)
 
     def run(self):
         t = threading.Thread(target=self._run)
         t.start()
 
-
     def _run(self):
         try:
-            self.clientSocket.connect((self.serverAddress, 6667))
+            self._clientSocket.connect((self._serverAddress, 6667))
         except Exception:
             traceback.print_exc()
         else:
-            with self.fd:
-                self.sendMsg(CREDENTIALS)
-                self.waitForEvent(self.sendPong)
-                self.waitForEvent(self.joinChannel)
-                while (self.running):
-                    self.waitForEvent(self.sendPong)
+            with self._fd:
+                self._sendMsg(CREDENTIALS)
+                self._waitForEvent(self._sendPong)
+                self._waitForEvent(self._joinChannels)
+                while self._running:
+                    self._waitForEvent(self._sendPong)
