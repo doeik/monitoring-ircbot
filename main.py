@@ -1,24 +1,35 @@
+#!/usr/bin/env python3
+
 import socket
-import time
 import os
 import stat
+import traceback
+import threading
+import json
 from IRCBot import IRCBot
 
 SERVERADDRESS = "192.168.56.101"
 UDS_FILE = "/home/rageagainsthepc/monitorbot"
 
 
-def handleConnection(bot, clientSocket):
+def handleConnection(clientSocket, bot):
     with clientSocket.makefile("r") as fd:
-        msg = []
-        msg.extend(fd.readlines())
-        for line in msg:
-            bot.composeMsgToChannel("test", line)
+        try:
+            recvdata = fd.readline()
+            jsonobj = json.loads(recvdata)
+        except ValueError:
+            bot.composeMsgToChannel(bot.errorchannel, "Error: Failed to parse json object")
+        except:
+            bot.composeMsgToChannel(bot.errorchannel, "Error: An error occured while fetching data from the unix socket.")
+        else:
+            bot.composeMsgToChannel(jsonobj[0], jsonobj[1])
 
+def interruptConnection(clientSocket):
+    try:
+        clientSocket.shutdown(socket.SHUT_RDWR)
+    except:
+        pass
 
-
-# Ich erwarte im Moment nicht mehr als eine Connection auf einmal.
-# könnte man bei Gelegenheit aber mal mit threading.Thread(target=handleConnection, (clientSocket, )) machen...
 def runServer(bot):
     try:
         os.unlink(UDS_FILE)
@@ -30,13 +41,23 @@ def runServer(bot):
     server_socket.listen(1)
     while True:
         clientSocket, clientAddress = server_socket.accept()
-        handleConnection(bot, clientSocket)
+        with clientSocket:
+            connectionThread = threading.Thread(target=handleConnection, args=(clientSocket, bot))
+            connectionThread.start()
+            connectionTimer = threading.Timer(10.0, interruptConnection, (clientSocket, ))
+            connectionTimer.start()
 
 
 def main():
-    bot = IRCBot(SERVERADDRESS)
-    bot.run()
-    runServer(bot)
+    bot = IRCBot(SERVERADDRESS, "test")
+    try:
+        bot.run()
+        for line in bot._channels:
+            print(line)
+        runServer(bot)
+    except (KeyboardInterrupt, Exception) as e:
+        bot.quit("Exception in main-Thread: " + e.__class__.__name__)
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

@@ -4,7 +4,6 @@ import traceback
 
 CREDENTIALS = "NICK Monitoring_System\r\n" \
               "USER moniBot * 8 :This is the monitoring message bot\r\n"
-CHANNELS = ["test"]
 
 
 class IRCBot:
@@ -12,16 +11,30 @@ class IRCBot:
     _clientSocket = None
     _fd = None
     _running = True
-    _lock = None
+    _sendlock = None
+    _privmsglock = None
+    _channels = []
+    errorchannel = None
 
-    def __init__(self, address):
+    def __init__(self, address, channels, errchannel="test"):
         self._serverAddress = address
         self._clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._fd = self._clientSocket.makefile("r")
-        self._lock = threading.Lock()
+        self._sendlock = threading.Lock()
+        self._privmsglock = threading.Lock()
+        if type(channels) is list:
+            self._channels.extend(channels)
+        else:
+            self._channels.append(channels)
+        self.errorchannel = errchannel
+        if errchannel not in self._channels:
+            self._channels.append(errchannel)
 
-    def quit(self):
-        self._sendMsg("QUIT")
+    def quit(self, reason=None):
+        if reason is None:
+            self._sendMsg("QUIT")
+        else:
+            self._sendMsg("QUIT :" + reason)
         self._running = False
         # Damit die readline-Methode nicht mehr blockt und der _run-Thread terminieren kann
         try:
@@ -33,12 +46,9 @@ class IRCBot:
         except:
             pass
 
-    def __del__(self):
-        self.quit()
-
     def _sendMsg(self, msg):
         res = True
-        with self._lock:
+        with self._sendlock:
             try:
                 self._clientSocket.send((msg + "\r\n").encode('UTF-8'))
             except:
@@ -70,7 +80,7 @@ class IRCBot:
         try:
             status = received.split()[1]
             if status == "376" or status == "422":
-                for channel in CHANNELS:
+                for channel in self._channels:
                     self._sendMsg("JOIN #" + channel)
                 res = True
         except:
@@ -78,7 +88,14 @@ class IRCBot:
         return res
 
     def composeMsgToChannel(self, channel, msg):
-        self._sendMsg("PRIVMSG #" + channel + " :" + msg)
+        msgQueue = []
+        if type(msg) is list:
+            msgQueue.extend(msg)
+        else:
+            msgQueue.append(msg)
+        with self._privmsglock:
+            for line in msgQueue:
+                self._sendMsg("PRIVMSG #" + channel + " :" + line)
 
     def run(self):
         t = threading.Thread(target=self._run)
