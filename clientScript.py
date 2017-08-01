@@ -5,12 +5,15 @@ import json
 import traceback
 from sys import argv
 
-UDS_FILE = "/home/rageagainsthepc/monitorbot"
+''' Edit this part here '''
+
+UNIXSOCKET = "/home/rageagainsthepc/monitorbot"
+CHANNEL = "test"
 
 def sendToBot(channel, msg):
     clientSocket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
-        clientSocket.connect(UDS_FILE)
+        clientSocket.connect(UNIXSOCKET)
     except Exception:
         traceback.print_exc()
     else:
@@ -20,8 +23,8 @@ def sendToBot(channel, msg):
                 fd.flush()
 
 def main():
-    if len(argv) > 2:
-        sendToBot(argv[1], argv[2])
+    if len(argv) > 1:
+        sendToBot(CHANNEL, argv[1])
     else:
         print("Too few arguments! Exiting...")
 

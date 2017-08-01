@@ -9,7 +9,8 @@ import json
 from IRCBot import IRCBot
 
 SERVERADDRESS = "192.168.56.101"
-UDS_FILE = "/home/rageagainsthepc/monitorbot"
+# should be /run/monitorbot or something
+UNIXSOCKET = "/home/rageagainsthepc/monitorbot"
 
 
 def handleConnection(clientSocket, bot):
@@ -20,9 +21,11 @@ def handleConnection(clientSocket, bot):
         except ValueError:
             bot.composeMsgToChannel(bot.errorchannel, "Error: Failed to parse json object")
         except:
-            bot.composeMsgToChannel(bot.errorchannel, "Error: An error occured while fetching data from the unix socket.")
+            bot.composeMsgToChannel(bot.errorchannel,
+                                    "Error: An error occured while fetching data from the unix socket.")
         else:
             bot.composeMsgToChannel(jsonobj[0], jsonobj[1])
+
 
 def interruptConnection(clientSocket):
     try:
@@ -30,21 +33,22 @@ def interruptConnection(clientSocket):
     except:
         pass
 
+
 def runServer(bot):
     try:
-        os.unlink(UDS_FILE)
+        os.unlink(UNIXSOCKET)
     except OSError:
         pass
     server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    server_socket.bind(UDS_FILE)
-    os.chmod(UDS_FILE, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP)
+    server_socket.bind(UNIXSOCKET)
+    os.chmod(UNIXSOCKET, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP)
     server_socket.listen(1)
     while True:
         clientSocket, clientAddress = server_socket.accept()
         with clientSocket:
             connectionThread = threading.Thread(target=handleConnection, args=(clientSocket, bot))
             connectionThread.start()
-            connectionTimer = threading.Timer(10.0, interruptConnection, (clientSocket, ))
+            connectionTimer = threading.Timer(10.0, interruptConnection, (clientSocket,))
             connectionTimer.start()
 
 
@@ -52,13 +56,10 @@ def main():
     bot = IRCBot(SERVERADDRESS, "test")
     try:
         bot.run()
-        for line in bot._channels:
-            print(line)
         runServer(bot)
     except (KeyboardInterrupt, Exception) as e:
         bot.quit("Exception in main-Thread: " + e.__class__.__name__)
         traceback.print_exc()
-
 
 if __name__ == "__main__":
     main()

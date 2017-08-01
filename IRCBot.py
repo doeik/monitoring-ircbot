@@ -1,6 +1,7 @@
 import socket
 import threading
 import traceback
+from typing import List, Union
 
 CREDENTIALS = "NICK Monitoring_System\r\n" \
               "USER moniBot * 8 :This is the monitoring message bot\r\n"
@@ -12,16 +13,16 @@ class IRCBot:
     _fd = None
     _running = True
     _sendlock = None
-    _privmsglock = None
+    _privmsglocks = {}
     _channels = []
     errorchannel = None
 
-    def __init__(self, address, channels, errchannel="test"):
+    def __init__(self, address: str, channels: Union[str, List[str]], errchannel: str="test"):
         self._serverAddress = address
         self._clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._fd = self._clientSocket.makefile("r")
         self._sendlock = threading.Lock()
-        self._privmsglock = threading.Lock()
+        # Set up channel list
         if type(channels) is list:
             self._channels.extend(channels)
         else:
@@ -29,8 +30,11 @@ class IRCBot:
         self.errorchannel = errchannel
         if errchannel not in self._channels:
             self._channels.append(errchannel)
+        # Create per-channel write locks
+        for channel in self._channels:
+            self._privmsglocks[channel] = threading.Lock()
 
-    def quit(self, reason=None):
+    def quit(self, reason: str=None):
         if reason is None:
             self._sendMsg("QUIT")
         else:
@@ -87,15 +91,17 @@ class IRCBot:
             pass
         return res
 
-    def composeMsgToChannel(self, channel, msg):
+    def composeMsgToChannel(self, channel: str, msg: Union[str, List[str]]):
         msgQueue = []
         if type(msg) is list:
             msgQueue.extend(msg)
         else:
             msgQueue.append(msg)
-        with self._privmsglock:
-            for line in msgQueue:
-                self._sendMsg("PRIVMSG #" + channel + " :" + line)
+        lock = self._privmsglocks.get(channel, None)
+        if not lock == None:
+            with lock:
+                for line in msgQueue:
+                    self._sendMsg("PRIVMSG #" + channel + " :" + line)
 
     def run(self):
         t = threading.Thread(target=self._run)
