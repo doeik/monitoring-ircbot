@@ -1,0 +1,12 @@
+[Unit]
+Description=irc bot for the monitoring system
+After=syslog.target
+[Service]
+Group=monitorbotusers
+ExecStart=/usr/local/bin/main.py
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=400
+StartLimitBurst=3
+[Install]
+WantedBy=multi-user.target
