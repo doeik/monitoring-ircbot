@@ -34,7 +34,7 @@ def interruptConnection(clientSocket):
         pass
 
 
-def runServer(bot):
+def runServer(bot: IRCBot):
     try:
         os.unlink(UNIXSOCKET)
     except OSError:
@@ -42,24 +42,34 @@ def runServer(bot):
     server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server_socket.bind(UNIXSOCKET)
     os.chmod(UNIXSOCKET, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP)
+    server_socket.settimeout(10)
     server_socket.listen(1)
-    while True:
-        clientSocket, clientAddress = server_socket.accept()
-        with clientSocket:
-            connectionThread = threading.Thread(target=handleConnection, args=(clientSocket, bot))
-            connectionThread.start()
-            connectionTimer = threading.Timer(10.0, interruptConnection, (clientSocket,))
-            connectionTimer.start()
+    while bot.isrunning:
+        try:
+            clientSocket, clientAddress = server_socket.accept()
+        except TimeoutError:
+            pass
+        else:
+            with clientSocket:
+                connectionThread = threading.Thread(target=handleConnection, args=(clientSocket, bot))
+                connectionThread.start()
+                connectionTimer = threading.Timer(10.0, interruptConnection, (clientSocket,))
+                connectionTimer.start()
 
 
 def main():
-    bot = IRCBot(SERVERADDRESS, "test")
+    '''
+    bot = IRCBot(SERVERADDRESS, "test", errchannel="test")
     try:
         bot.run()
         runServer(bot)
     except (KeyboardInterrupt, Exception) as e:
         bot.quit("Exception in main-Thread: " + e.__class__.__name__)
         traceback.print_exc()
+    '''
+    with IRCBot(SERVERADDRESS, "test", errchannel="test") as bot:
+        runServer(bot)
+
 
 if __name__ == "__main__":
     main()
