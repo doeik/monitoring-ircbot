@@ -7,7 +7,7 @@ CREDENTIALS = "NICK Monitoring_System\r\n" \
               "USER moniBot * 8 :This is the monitoring message bot\r\n"
 
 
-# TODO: Cleaner exception handling, what if nick/user already taken?
+# TODO: what if nick/user already taken?
 
 class IRCBot:
     _serverAddress = None
@@ -57,11 +57,11 @@ class IRCBot:
         # Damit die readline-Methode nicht mehr blockt und der _run-Thread terminieren kann
         try:
             self._clientSocket.shutdown(socket.SHUT_RDWR)
-        except:
+        except OSError:
             pass
         try:
             self._clientSocket.close()
-        except:
+        except OSError:
             pass
 
     def _sendMsg(self, msg):
@@ -69,7 +69,7 @@ class IRCBot:
         with self._sendlock:
             try:
                 self._clientSocket.send((msg + "\r\n").encode('UTF-8'))
-            except:
+            except OSError:
                 res = False
         return res
 
@@ -80,7 +80,7 @@ class IRCBot:
             if len(received) == 0:
                 self.isrunning = False
             else:
-                print(received)
+                print(received) # just for debugging
                 result = action(received)
 
     def _sendPong(self, received):
@@ -117,14 +117,16 @@ class IRCBot:
 
     def _handleServerInput(self, received):
         if not self._sendPong(received):
+            decomposed = received.split()
             try:
-                decomposed = received.split()
                 statuscode = decomposed[1]
-            except:
+            except IndexError:
                 pass
             else:
                 if statuscode == "401":
                     self.composeMsgTo(self.errorchannel, "Failed to compose message to " + " ".join(decomposed[3:]))
+        # This method shall be active as long as the bot is running
+        return False
 
     def run(self):
         t = threading.Thread(target=self._run)
@@ -134,7 +136,7 @@ class IRCBot:
         self._clientSocket.settimeout(10)
         try:
             self._clientSocket.connect((self._serverAddress, 6667))
-        except Exception:
+        except OSError:
             traceback.print_exc()
         else:
             self._clientSocket.settimeout(None)

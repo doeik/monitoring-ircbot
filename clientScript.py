@@ -8,7 +8,7 @@ from sys import argv
 ''' Edit this part here '''
 
 UNIXSOCKET = "/home/rageagainsthepc/monitorbot"
-CHANNEL = "test"
+CHANNEL = "#test"
 
 def sendToBot(channel, msg):
     clientSocket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

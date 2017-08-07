@@ -14,22 +14,22 @@ UNIXSOCKET = "/home/rageagainsthepc/monitorbot"
 
 def handleConnection(clientSocket, bot):
     with clientSocket.makefile("r") as fd:
-        try:
-            recvdata = fd.readline()
-            jsonobj = json.loads(recvdata)
-        except ValueError:
-            bot.composeMsgTo(bot.errorchannel, "Error: Failed to parse json object")
-        except Exception as e:
-            bot.composeMsgTo(bot.errorchannel,
-                             "Error: An error occured while fetching data from the unix socket: " + e.__class__.__name__)
+        recvdata = fd.readline()
+        if len(recvdata) > 0:
+            try:
+                jsonobj = json.loads(recvdata)
+            except ValueError:
+                bot.composeMsgTo(bot.errorchannel, "Error: Failed to parse json object")
+            else:
+                bot.composeMsgTo(jsonobj[0], jsonobj[1])
         else:
-            bot.composeMsgTo(jsonobj[0], jsonobj[1])
+            bot.composeMsgTo(bot.errorchannel, "Error: Connection terminated before data could be read.")
 
 
 def interruptConnection(clientSocket):
     try:
         clientSocket.shutdown(socket.SHUT_RDWR)
-    except:
+    except OSError:
         pass
 
 
@@ -50,10 +50,8 @@ def runServer(bot):
             pass
         else:
             with clientSocket:
-                connectionThread = threading.Thread(target=handleConnection, args=(clientSocket, bot))
-                connectionThread.start()
-                connectionTimer = threading.Timer(10.0, interruptConnection, (clientSocket,))
-                connectionTimer.start()
+                threading.Thread(target=handleConnection, args=(clientSocket, bot)).start()
+                threading.Timer(10.0, interruptConnection, (clientSocket,)).start()
 
 
 def main():
