@@ -3,7 +3,6 @@
 import socket
 import os
 import stat
-import traceback
 import threading
 import json
 from IRCBot import IRCBot
@@ -19,12 +18,12 @@ def handleConnection(clientSocket, bot):
             recvdata = fd.readline()
             jsonobj = json.loads(recvdata)
         except ValueError:
-            bot.composeMsgToChannel(bot.errorchannel, "Error: Failed to parse json object")
-        except:
-            bot.composeMsgToChannel(bot.errorchannel,
-                                    "Error: An error occured while fetching data from the unix socket.")
+            bot.composeMsgTo(bot.errorchannel, "Error: Failed to parse json object")
+        except Exception as e:
+            bot.composeMsgTo(bot.errorchannel,
+                             "Error: An error occured while fetching data from the unix socket: " + e.__class__.__name__)
         else:
-            bot.composeMsgToChannel(jsonobj[0], jsonobj[1])
+            bot.composeMsgTo(jsonobj[0], jsonobj[1])
 
 
 def interruptConnection(clientSocket):
@@ -34,7 +33,7 @@ def interruptConnection(clientSocket):
         pass
 
 
-def runServer(bot: IRCBot):
+def runServer(bot):
     try:
         os.unlink(UNIXSOCKET)
     except OSError:
@@ -47,7 +46,7 @@ def runServer(bot: IRCBot):
     while bot.isrunning:
         try:
             clientSocket, clientAddress = server_socket.accept()
-        except TimeoutError:
+        except socket.timeout:
             pass
         else:
             with clientSocket:
@@ -58,16 +57,7 @@ def runServer(bot: IRCBot):
 
 
 def main():
-    '''
-    bot = IRCBot(SERVERADDRESS, "test", errchannel="test")
-    try:
-        bot.run()
-        runServer(bot)
-    except (KeyboardInterrupt, Exception) as e:
-        bot.quit("Exception in main-Thread: " + e.__class__.__name__)
-        traceback.print_exc()
-    '''
-    with IRCBot(SERVERADDRESS, "test", errchannel="test") as bot:
+    with IRCBot(SERVERADDRESS, "#test", errchannel="#test") as bot:
         runServer(bot)
 
 
