@@ -6,7 +6,8 @@ from typing import List, Union
 CREDENTIALS = "NICK Monitoring_System\r\n" \
               "USER moniBot * 8 :This is the monitoring message bot\r\n"
 
-#TODO: Cleaner exception handling, what if nick/user already taken?
+
+# TODO: Cleaner exception handling, what if nick/user already taken?
 
 class IRCBot:
     _serverAddress = None
@@ -18,7 +19,7 @@ class IRCBot:
     _channels = []
     errorchannel = None
 
-    def __init__(self, address: str, channels: Union[str, List[str]], errchannel: str="errors"):
+    def __init__(self, address: str, channels: Union[str, List[str]], errchannel: str = "#errors"):
         self._serverAddress = address
         self._clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._fd = self._clientSocket.makefile("r")
@@ -47,7 +48,7 @@ class IRCBot:
             self.quit("An unhandled Exception occurred: " + exc_type.__name__)
         return True
 
-    def quit(self, reason: str=None):
+    def quit(self, reason: str = None):
         if reason is None:
             self._sendMsg("QUIT")
         else:
@@ -79,6 +80,7 @@ class IRCBot:
             if len(received) == 0:
                 self.isrunning = False
             else:
+                print(received)
                 result = action(received)
 
     def _sendPong(self, received):
@@ -90,30 +92,39 @@ class IRCBot:
 
     def _joinChannels(self, received):
         res = False
-        # falls die Verbindung geschlossen wird, bevor der Bot im
-        # Pong-Loop ist, würde das hier böse abrauchen, daher try-catch
-        try:
-            status = received.split()[1]
-        except:
-            pass
-        else:
-            if status == "376" or status == "422":
-                for channel in self._channels:
-                    self._sendMsg("JOIN #" + channel)
-                res = True
+        status = received.split()[1]
+        if status == "376" or status == "422":
+            for channel in self._channels:
+                self._sendMsg("JOIN " + channel)
+            res = True
         return res
 
-    def composeMsgToChannel(self, channel: str, msg: Union[str, List[str]]):
+    def composeMsgTo(self, receiver: str, msg: Union[str, List[str]]):
         msgQueue = []
         if type(msg) is list:
             msgQueue.extend(msg)
         else:
             msgQueue.append(msg)
-        lock = self._privmsglocks.get(channel, None)
-        if lock is not None:
-            with lock:
-                for line in msgQueue:
-                    self._sendMsg("PRIVMSG #" + channel + " :" + line)
+        if receiver.startswith("#"):
+            lock = self._privmsglocks.get(receiver, None)
+            if lock is not None:
+                with lock:
+                    for line in msgQueue:
+                        self._sendMsg("PRIVMSG " + receiver + " :" + line)
+        else:
+            for line in msgQueue:
+                self._sendMsg("PRIVMSG " + receiver + " :" + line)
+
+    def _handleServerInput(self, received):
+        if not self._sendPong(received):
+            try:
+                decomposed = received.split()
+                statuscode = decomposed[1]
+            except:
+                pass
+            else:
+                if statuscode == "401":
+                    self.composeMsgTo(self.errorchannel, "Failed to compose message to " + " ".join(decomposed[3:]))
 
     def run(self):
         t = threading.Thread(target=self._run)
@@ -132,4 +143,4 @@ class IRCBot:
                 self._waitForEvent(self._sendPong)
                 self._waitForEvent(self._joinChannels)
                 while self.isrunning:
-                    self._waitForEvent(self._sendPong)
+                    self._waitForEvent(self._handleServerInput)
