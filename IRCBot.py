@@ -124,6 +124,7 @@ class IRCBot:
                 res = True
         return res
 
+    # Diese Funktion stört meinen Sinn für Ästhetik, bah! >:[
     def _login(self, nick, user, info, retries=3):
         self._sendMsg("NICK " + nick)
         self._sendMsg("USER " + user + " * 8 :" + info)
