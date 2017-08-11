@@ -7,7 +7,7 @@ from sys import argv
 
 ''' Edit this part here '''
 
-UNIXSOCKET = "/home/rageagainsthepc/monitorbot"
+UNIXSOCKET = "/run/monitorbot"
 CHANNEL = "#test"
 
 def sendToBot(channel, msg):

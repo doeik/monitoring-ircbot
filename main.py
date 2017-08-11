@@ -8,8 +8,7 @@ import json
 from IRCBot import IRCBot
 
 SERVERADDRESS = "192.168.56.101"
-# should be /run/monitorbot or something
-UNIXSOCKET = "/home/rageagainsthepc/monitorbot"
+UNIXSOCKET = "/run/monitorbot"
 
 
 def handleConnection(clientSocket, bot):

@@ -3,7 +3,7 @@ import threading
 import traceback
 from typing import List, Union
 
-NICK = "Monitoring_System"
+NICK = "Check_MK"
 USER = "moniBot"
 INFO = "This is the monitoring message bot"
 
@@ -64,38 +64,39 @@ class IRCBot:
             pass
 
     def _sendMsg(self, msg):
-        res = True
+        success = True
         with self._sendlock:
             try:
                 self._clientSocket.send((msg + "\r\n").encode('UTF-8'))
             except OSError:
-                res = False
-        return res
+                success = False
+        return success
 
-    def _waitForEvent(self, action):
-        result = False
-        while not result and self.isrunning:
+    def _waitForEvent(self, action, arguments=()):
+        target_reached = False
+        while not target_reached and self.isrunning:
             received = self._fd.readline()
             if len(received) == 0:
                 self.isrunning = False
             else:
-                result = action(received)
+                print(received)
+                target_reached = action(received, *arguments)
 
     def _sendPong(self, received):
-        res = False
+        target_reached = False
         if received.startswith("PING"):
             self._sendMsg("PONG" + received[4:])
-            res = True
-        return res
+            target_reached = True
+        return target_reached
 
     def _joinChannels(self, received):
-        res = False
+        target_reached = False
         status = received.split()[1]
         if status == "376" or status == "422":
             for channel in self._channels:
                 self._sendMsg("JOIN " + channel)
-            res = True
-        return res
+            target_reached = True
+        return target_reached
 
     def composeMsgTo(self, receiver: str, msg: Union[str, List[str]]):
         msgQueue = []
@@ -114,32 +115,29 @@ class IRCBot:
                 self._sendMsg("PRIVMSG " + receiver + " :" + line)
 
     def _checkForLoginFail(self, received):
-        res = False
+        target_reached = False
         try:
             status = received.split()[1]
         except IndexError:
             pass
         else:
             if status == "433":
-                res = True
-        return res
+                target_reached = True
+        return target_reached
 
-    # Diese Funktion stört meinen Sinn für Ästhetik, bah! >:[
-    def _login(self, nick, user, info, retries=3):
-        self._sendMsg("NICK " + nick)
-        self._sendMsg("USER " + user + " * 8 :" + info)
-        eventReached  = False
-        while not eventReached:
-            received = self._fd.readline()
-            if len(received) > 0:
-                eventReached = self._sendPong(received)
-                if not eventReached:
-                    eventReached = self._checkForLoginFail(received)
-                    if eventReached and retries >= 0:
-                        self._login("_" + nick, user, info, retries - 1)
-            else:
-                # Connection dieded, break loop
-                eventReached = True
+    def _handleLogin(self, received, nick, retries=3):
+        if retries > 0:
+            target_reached = self._sendPong(received)
+            if not target_reached:
+                if self._checkForLoginFail(received):
+                    nick = "_" + nick
+                    self._sendMsg("NICK " + nick)
+                    self._waitForEvent(self._handleLogin, (nick, retries-1))
+                    target_reached = True
+        else:
+            self.quit()
+            target_reached = True
+        return target_reached
 
     def _handleServerInput(self, received):
         if not self._sendPong(received):
@@ -167,7 +165,9 @@ class IRCBot:
         else:
             self._clientSocket.settimeout(None)
             with self._fd:
-                self._login(NICK, USER, INFO)
+                self._sendMsg("NICK " + NICK)
+                self._sendMsg("USER " + USER + " * 8 :" + INFO)
+                self._waitForEvent(self._handleLogin, (NICK,))
                 self._waitForEvent(self._joinChannels)
                 while self.isrunning:
                     self._waitForEvent(self._handleServerInput)
